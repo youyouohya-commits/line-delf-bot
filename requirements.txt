@@ -1,0 +1,5 @@
+flask
+google-generativeai
+line-bot-sdk
+apscheduler
+gunicorn
