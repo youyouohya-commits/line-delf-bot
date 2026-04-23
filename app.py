@@ -16,11 +16,12 @@ app = Flask(__name__)
 CACHE_FILE = "daily_cache.json"
 user_states = {}
 
+
 def save_daily(msg1, msg2):
-    data = {"date": str(date.today()), "message_1": msg1, "message_2": msg2}
     f = open(CACHE_FILE, "w", encoding="utf-8")
-    json.dump(data, f, ensure_ascii=False)
+    json.dump({"date": str(date.today()), "message_1": msg1, "message_2": msg2}, f, ensure_ascii=False)
     f.close()
+
 
 def load_daily():
     if not os.path.exists(CACHE_FILE):
@@ -30,17 +31,19 @@ def load_daily():
     f.close()
     return data
 
+
 def generate_delf_practice():
     today = date.today().strftime("%d %B %Y")
-    prompt = "Tu es un coach DELF B2. Date: " + today + ". Genere un sujet DELF B2 et une redaction modele. Reponds en JSON: {\"message_1\": \"sujet et vocabulaire\", \"message_2\": \"redaction modele 250 mots\"}"
+    prompt = "Tu es un coach DELF B2. Date: " + today + ". Genere un sujet DELF B2 et une redaction modele. Reponds UNIQUEMENT en JSON valide sans markdown: {\"message_1\": \"sujet et vocabulaire B2\", \"message_2\": \"redaction modele minimum 250 mots\"}"
     try:
         response = model.generate_content(prompt)
         raw = re.sub(r"```json|```", "", response.text).strip()
         data = json.loads(raw)
         return data["message_1"], data["message_2"]
     except Exception as e:
-        print("Error:", e)
+        print("Error: " + str(e))
         return ("Generation failed", "Generation failed")
+
 
 def grade_essay(essay, topic):
     prompt = "Tu es correcteur DELF B2. Sujet: " + topic + " Redaction: " + essay + " Donne une note /25 et des corrections detaillees."
@@ -50,13 +53,16 @@ def grade_essay(essay, topic):
     except Exception as e:
         return "Correction failed"
 
+
 def morning_push():
     msg1, msg2 = generate_delf_practice()
     save_daily(msg1, msg2)
     line_bot_api.broadcast(TextSendMessage(text=msg1))
 
+
 def is_essay(text):
     return len(re.findall(r"\b\w+\b", text)) >= 80
+
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -64,6 +70,7 @@ def callback():
     body = request.get_data(as_text=True)
     handler.handle(body, signature)
     return "OK"
+
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -85,6 +92,7 @@ def handle_message(event):
         line_bot_api.push_message(user_id, TextSendMessage(text=result))
     else:
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="Send 完成 or ✅ to get today's essay!"))
+
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(morning_push, "cron", hour=8, minute=0)
