@@ -14,4 +14,7 @@ line_bot_api = LineBotApi(os.environ.get("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.environ.get("LINE_CHANNEL_SECRET"))
 app = Flask(__name__)
 CACHE_FILE = "daily_cache.json"
-user_states
+user_states = {}
+
+def save_daily(msg1, msg2):
+    data = {"date": str(date.today()), "message_1": msg
