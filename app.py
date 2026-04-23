@@ -72,6 +72,18 @@ def callback():
     return "OK"
 
 
+@app.route("/generate", methods=["GET"])
+def generate():
+    msg1, msg2 = generate_delf_practice()
+    save_daily(msg1, msg2)
+    return "Done! Today topic generated. Now send 完成 to your LINE bot!", 200
+
+
+@app.route("/", methods=["GET"])
+def index():
+    return "DELF Bot is running!", 200
+
+
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_id = event.source.user_id
