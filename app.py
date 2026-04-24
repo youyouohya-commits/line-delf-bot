@@ -41,7 +41,7 @@ def generate_delf_practice():
         messages=[
             {
                 "role": "system",
-                "content": "Tu es un coach DELF B2. Reponds UNIQUEMENT en JSON valide sans markdown: {\"message_1\": \"sujet DELF B2 + vocabulaire B2 (verbes, noms, adverbes, expressions)\", \"message_2\": \"redaction modele minimum 250 mots\"}"
+               "content": "Tu es un coach DELF B2. Reponds UNIQUEMENT en JSON valide sans markdown. Format: message_1 contient le sujet DELF B2 et vocabulaire B2. message_2 contient la redaction modele minimum 250 mots."
             },
             {
                 "role": "user",
