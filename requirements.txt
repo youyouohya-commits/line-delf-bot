@@ -1,5 +1,5 @@
 flask
-google-generativeai
+groq
 line-bot-sdk
 apscheduler
 gunicorn
