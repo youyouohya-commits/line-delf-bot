@@ -17,6 +17,16 @@ CACHE_FILE = "daily_cache.json"
 user_states = {}
 
 
+def clean_text(text):
+    if not text:
+        return ""
+    text = str(text)
+    text = text.replace("\r", "\n")
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = text.strip()
+    return text
+
+
 def save_daily(msg1, msg2):
     f = open(CACHE_FILE, "w", encoding="utf-8")
     json.dump({"date": str(date.today()), "message_1": msg1, "message_2": msg2}, f, ensure_ascii=False)
@@ -34,48 +44,52 @@ def load_daily():
 
 def generate_delf_practice():
     today = date.today().strftime("%d %B %Y")
+    system_msg = "Tu es un coach DELF B2. Tu dois repondre en JSON uniquement. Le JSON doit avoir exactement deux cles: message_1 et message_2. message_1 contient le sujet et vocabulaire. message_2 contient la redaction modele. Ne mets aucun markdown, aucun backtick."
+    user_msg = "Date: " + today + ". Genere un sujet DELF B2 avec vocabulaire et une redaction modele de 250 mots minimum. Reponds en JSON uniquement avec les cles message_1 et message_2."
+
     response = client.chat.completions.create(
         model=MODEL,
-        temperature=0.8,
+        temperature=0.7,
         max_tokens=2000,
         messages=[
-            {
-                "role": "system",
-               "content": "Tu es un coach DELF B2. Reponds UNIQUEMENT en JSON valide sans markdown. Format: message_1 contient le sujet DELF B2 et vocabulaire B2. message_2 contient la redaction modele minimum 250 mots."
-            },
-            {
-                "role": "user",
-                "content": "Aujourd'hui, nous sommes le " + today + ". Genere le contenu DELF B2 du jour."
-            }
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg}
         ]
     )
     raw = response.choices[0].message.content.strip()
-    raw = re.sub(r"```json|```", "", raw).strip()
+    raw = re.sub(r"```json", "", raw)
+    raw = re.sub(r"```", "", raw)
+    raw = raw.strip()
+
     try:
         data = json.loads(raw)
-        return data["message_1"], data["message_2"]
+        msg1 = clean_text(data.get("message_1", ""))
+        msg2 = clean_text(data.get("message_2", ""))
+        if msg1 and msg2:
+            return msg1, msg2
+        else:
+            return "Sujet non disponible aujourd'hui.", "Redaction non disponible."
     except Exception as e:
-        print("Error: " + str(e))
-        return ("Generation failed", "Generation failed")
+        print("JSON Error: " + str(e))
+        print("Raw: " + raw[:200])
+        return "Sujet non disponible aujourd'hui.", "Redaction non disponible."
 
 
 def grade_essay(essay, topic):
+    system_msg = "Tu es un correcteur DELF B2 expert. Evalue la redaction et donne: note sur 25, points forts, erreurs avec corrections, vocabulaire B2 recommande."
+    user_msg = "Sujet: " + topic + "\n\nRedaction de l'etudiant:\n" + essay
+
     response = client.chat.completions.create(
         model=MODEL,
         temperature=0.3,
         max_tokens=1500,
         messages=[
-            {
-                "role": "system",
-                "content": "Tu es un correcteur DELF B2 expert. Evalue la redaction selon 5 criteres (note /25). Donne: note/25, points forts, erreurs + corrections, vocabulaire B2 recommande."
-            },
-            {
-                "role": "user",
-                "content": "Sujet: " + topic + "\n\nRedaction: " + essay
-            }
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg}
         ]
     )
-    return response.choices[0].message.content.strip()
+    result = response.choices[0].message.content.strip()
+    return clean_text(result)
 
 
 def morning_push():
@@ -86,6 +100,26 @@ def morning_push():
 
 def is_essay(text):
     return len(re.findall(r"\b\w+\b", text)) >= 80
+
+
+def safe_reply(reply_token, text):
+    try:
+        text = clean_text(text)
+        if not text:
+            text = "Erreur: message vide."
+        line_bot_api.reply_message(reply_token, TextSendMessage(text=text))
+    except Exception as e:
+        print("Reply error: " + str(e))
+
+
+def safe_push(user_id, text):
+    try:
+        text = clean_text(text)
+        if not text:
+            text = "Erreur: message vide."
+        line_bot_api.push_message(user_id, TextSendMessage(text=text))
+    except Exception as e:
+        print("Push error: " + str(e))
 
 
 @app.route("/callback", methods=["POST"])
@@ -100,7 +134,7 @@ def callback():
 def generate():
     msg1, msg2 = generate_delf_practice()
     save_daily(msg1, msg2)
-    return "Done! Today topic generated. Now send 完成 to your LINE bot!", 200
+    return "Done! msg1=" + msg1[:50] + "...", 200
 
 
 @app.route("/", methods=["GET"])
@@ -113,21 +147,26 @@ def handle_message(event):
     user_id = event.source.user_id
     user_text = event.message.text.strip()
     cache = load_daily()
+
     if "完成" in user_text or "✅" in user_text:
         if cache and cache["date"] == str(date.today()):
             user_states[user_id] = "awaiting_essay"
-            reply = cache["message_2"]
+            reply = cache.get("message_2", "")
+            if not reply:
+                reply = "Contenu non disponible."
+            safe_reply(event.reply_token, reply)
         else:
-            reply = "Not loaded yet, try later!"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+            safe_reply(event.reply_token, "Pas encore charge, reessaie plus tard!")
+
     elif user_states.get(user_id) == "awaiting_essay" and is_essay(user_text):
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="Correcting, please wait..."))
+        safe_reply(event.reply_token, "Correction en cours, patiente 10 secondes...")
         topic = cache.get("message_1", "") if cache else ""
         result = grade_essay(user_text, topic)
         user_states[user_id] = None
-        line_bot_api.push_message(user_id, TextSendMessage(text=result))
+        safe_push(user_id, result)
+
     else:
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="Send 完成 or ✅ to get today's essay!"))
+        safe_reply(event.reply_token, "Envoie 完成 pour recevoir la redaction modele du jour!")
 
 
 scheduler = BackgroundScheduler()
