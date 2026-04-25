@@ -106,8 +106,19 @@ def generate_delf_practice():
 def grade_essay(essay, topic):
     system_msg = (
         "Tu es un correcteur DELF B2 expert. "
-        "Evalue la redaction et donne: "
-        "note sur 25, points forts, erreurs avec corrections, vocabulaire B2 recommande."
+        "Reponds UNIQUEMENT en JSON valide avec ces cles: "
+        "note, respect_consigne, organisation, grammaire, vocabulaire, style, "
+        "points_forts, erreurs, vocabulaire_recommande. "
+        "note: string comme 18/25. "
+        "respect_consigne: score comme 4/5. "
+        "organisation: score comme 3/5. "
+        "grammaire: score comme 4/5. "
+        "vocabulaire: score comme 3/5. "
+        "style: score comme 4/5. "
+        "points_forts: liste de 3 points forts (array de strings). "
+        "erreurs: liste de 3 erreurs avec correction (array de strings). "
+        "vocabulaire_recommande: liste de 5 mots B2 recommandes (array de strings). "
+        "Ne mets aucun markdown ni backtick."
     )
     user_msg = "Sujet: " + topic + "\n\nRedaction:\n" + essay
 
@@ -120,8 +131,46 @@ def grade_essay(essay, topic):
             {"role": "user", "content": user_msg}
         ]
     )
-    result = response.choices[0].message.content.strip()
-    return clean_text(result)
+    raw = response.choices[0].message.content.strip()
+    raw = re.sub(r"```json", "", raw)
+    raw = re.sub(r"```", "", raw)
+    raw = raw.strip()
+
+    try:
+        data = json.loads(raw)
+        note = data.get("note", "?/25")
+        rc = data.get("respect_consigne", "?/5")
+        org = data.get("organisation", "?/5")
+        gram = data.get("grammaire", "?/5")
+        voc = data.get("vocabulaire", "?/5")
+        style = data.get("style", "?/5")
+        points_forts = data.get("points_forts", [])
+        erreurs = data.get("erreurs", [])
+        vocab_rec = data.get("vocabulaire_recommande", [])
+
+        result = "📊 Résultat DELF B2\n\n"
+        result += "🏆 Note finale: " + note + "\n\n"
+        result += "📋 Détail des notes\n"
+        result += "- Respect de la consigne: " + rc + "\n"
+        result += "- Organisation: " + org + "\n"
+        result += "- Grammaire: " + gram + "\n"
+        result += "- Vocabulaire: " + voc + "\n"
+        result += "- Style: " + style + "\n\n"
+        result += "✅ Points forts\n\n"
+        for p in points_forts:
+            result += "- " + p.strip() + "\n"
+        result += "\n❌ Erreurs à corriger\n\n"
+        for e in erreurs:
+            result += "- " + e.strip() + "\n"
+        result += "\n📚 Vocabulaire B2 recommandé\n\n"
+        for v in vocab_rec:
+            result += "- " + v.strip() + "\n"
+
+        return result.strip()
+
+    except Exception as e:
+        print("Grade JSON Error: " + str(e))
+        return clean_text(raw)
 
 
 def morning_push():
