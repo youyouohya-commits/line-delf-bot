@@ -16,6 +16,14 @@ app = Flask(__name__)
 CACHE_FILE = "daily_cache.json"
 user_states = {}
 
+TOPICS = [
+    "societe", "technologie", "environnement", "education", "sante",
+    "travail", "culture", "immigration", "medias", "politique",
+    "sport", "economie", "famille", "alimentation", "urbanisme",
+    "intelligence artificielle", "reseaux sociaux", "inegalites sociales",
+    "tourisme", "langue et identite"
+]
+
 
 def clean_text(text):
     if not text:
@@ -42,38 +50,50 @@ def load_daily():
     return data
 
 
-def format_message(sujet, mots, expressions):
-    msg = "🎯 Sujet du jour\n\n"
+def format_message(sujet, consigne, mots, expressions):
+    msg = "Sujet du jour\n\n"
     msg += sujet.strip() + "\n\n"
-    msg += "📚 Les mots cles\n\n"
+    msg += "Consigne\n\n"
+    msg += consigne.strip() + "\n\n"
+    msg += "Les mots cles\n\n"
     for mot in mots:
         msg += "- " + mot.strip() + "\n"
-    msg += "\n💬 Les expressions utiles\n\n"
+    msg += "\nLes expressions utiles\n\n"
     for exp in expressions:
         msg += "- " + exp.strip() + "\n"
     return msg.strip()
 
 
+def get_topic_of_day():
+    day_index = date.today().timetuple().tm_yday
+    return TOPICS[day_index % len(TOPICS)]
+
+
 def generate_delf_practice():
     today = date.today().strftime("%d %B %Y")
+    theme = get_topic_of_day()
 
     system_msg = (
-        "Tu es un coach DELF B2. "
-        "Reponds UNIQUEMENT en JSON valide avec exactement ces cles: "
-        "sujet, mots_cles, expressions, redaction. "
-        "sujet: string avec le sujet DELF B2. "
-        "mots_cles: liste de 8 mots importants (array de strings). "
-        "expressions: liste de 6 expressions utiles (array de strings). "
-        "redaction: string avec la redaction modele de 250 mots minimum. "
+        "Tu es un coach DELF B2 expert. "
+        "Cree un sujet de production ecrite DELF B2 sur le theme: " + theme + ". "
+        "Le sujet doit etre une vraie question de debat, complexe et precise, pas vague. "
+        "La consigne doit demander de donner un avis argumente avec des exemples. "
+        "Reponds UNIQUEMENT en JSON valide avec ces cles: "
+        "sujet, consigne, mots_cles, expressions, redaction. "
+        "sujet: string court qui presente le theme (2-3 phrases). "
+        "consigne: string avec la question precise a traiter (minimum 2 phrases detaillees). "
+        "mots_cles: array de 10 mots varies (verbes, noms, adjectifs). "
+        "expressions: array de 8 expressions B2 utiles pour argumenter. "
+        "redaction: string avec une redaction modele de MINIMUM 300 mots, bien structuree avec introduction, developpement en 2 parties, conclusion. "
         "Ne mets aucun markdown ni backtick."
     )
 
-    user_msg = "Date: " + today + ". Genere le contenu DELF B2 du jour en JSON."
+    user_msg = "Date: " + today + ". Theme du jour: " + theme + ". Genere le contenu DELF B2 complet en JSON."
 
     response = client.chat.completions.create(
         model=MODEL,
-        temperature=0.7,
-        max_tokens=2000,
+        temperature=0.9,
+        max_tokens=3000,
         messages=[
             {"role": "system", "content": system_msg},
             {"role": "user", "content": user_msg}
@@ -88,44 +108,62 @@ def generate_delf_practice():
     try:
         data = json.loads(raw)
         sujet = data.get("sujet", "")
+        consigne = data.get("consigne", "")
         mots = data.get("mots_cles", [])
         expressions = data.get("expressions", [])
         redaction = data.get("redaction", "")
 
-        msg1 = format_message(sujet, mots, expressions)
+        msg1 = format_message(sujet, consigne, mots, expressions)
         msg2 = "Redaction modele\n\n" + clean_text(redaction)
 
         return msg1, msg2
 
     except Exception as e:
         print("JSON Error: " + str(e))
-        print("Raw: " + raw[:300])
         return ("Generation failed", "Generation failed")
 
 
 def grade_essay(essay, topic):
+    word_count = len(re.findall(r"\b\w+\b", essay))
+
     system_msg = (
-        "Tu es un correcteur DELF B2 expert. "
-        "Reponds UNIQUEMENT en JSON valide avec ces cles: "
-        "note, respect_consigne, organisation, grammaire, vocabulaire, style, "
-        "points_forts, erreurs, vocabulaire_recommande. "
-        "note: string comme 18/25. "
-        "respect_consigne: string comme 4/5. "
-        "organisation: string comme 3/5. "
-        "grammaire: string comme 4/5. "
-        "vocabulaire: string comme 3/5. "
-        "style: string comme 4/5. "
-        "points_forts: array de 3 strings courts. "
-        "erreurs: array de 3 strings courts avec correction. "
-        "vocabulaire_recommande: array de 5 strings. "
-        "IMPORTANT: Tous les scores doivent etre des strings comme 4/5 pas des nombres. "
-        "Ne mets aucun markdown ni backtick. JSON uniquement."
+        "Tu es un correcteur DELF B2 tres strict et precis. "
+        "Tu dois evaluer honnêtement selon les vrais criteres DELF B2. "
+        "Un etudiant moyen obtient entre 12 et 16 sur 25. "
+        "Sois strict: penalise les erreurs de grammaire, le manque de vocabulaire B2, "
+        "le manque d'arguments developpes, et les textes trop courts. "
+        "La redaction fait " + str(word_count) + " mots. "
+        "Si moins de 150 mots, la note maximale est 12/25. "
+        "Si moins de 200 mots, la note maximale est 16/25. "
+        "Reponds en texte simple avec exactement ce format:\n"
+        "NOTE: [X]/25\n"
+        "Respect de la consigne: [X]/5\n"
+        "Organisation: [X]/5\n"
+        "Grammaire: [X]/5\n"
+        "Vocabulaire: [X]/5\n"
+        "Style: [X]/5\n"
+        "POINTS FORTS:\n"
+        "- [point 1 precis]\n"
+        "- [point 2 precis]\n"
+        "ERREURS PRINCIPALES:\n"
+        "- [phrase originale] -> [correction]\n"
+        "- [phrase originale] -> [correction]\n"
+        "- [phrase originale] -> [correction]\n"
+        "VOCABULAIRE B2 A UTILISER:\n"
+        "- [mot ou expression]\n"
+        "- [mot ou expression]\n"
+        "- [mot ou expression]\n"
+        "- [mot ou expression]\n"
+        "- [mot ou expression]\n"
+        "CONSEIL:\n"
+        "[un conseil personnalise pour progresser]\n"
+        "Reponds UNIQUEMENT avec ce format."
     )
-    user_msg = "Sujet: " + topic[:200] + "\n\nRedaction:\n" + essay[:1000]
+    user_msg = "Sujet: " + topic[:300] + "\n\nRedaction de l'etudiant (" + str(word_count) + " mots):\n" + essay[:2000]
 
     response = client.chat.completions.create(
         model=MODEL,
-        temperature=0.3,
+        temperature=0.2,
         max_tokens=1000,
         messages=[
             {"role": "system", "content": system_msg},
@@ -133,46 +171,7 @@ def grade_essay(essay, topic):
         ]
     )
     raw = response.choices[0].message.content.strip()
-    raw = re.sub(r"```json", "", raw)
-    raw = re.sub(r"```", "", raw)
-    raw = raw.strip()
-
-    try:
-        data = json.loads(raw)
-        note = str(data.get("note", "?/25"))
-        rc = str(data.get("respect_consigne", "?/5"))
-        org = str(data.get("organisation", "?/5"))
-        gram = str(data.get("grammaire", "?/5"))
-        voc = str(data.get("vocabulaire", "?/5"))
-        style = str(data.get("style", "?/5"))
-        points_forts = data.get("points_forts", [])
-        erreurs = data.get("erreurs", [])
-        vocab_rec = data.get("vocabulaire_recommande", [])
-
-        result = "📊 Résultat DELF B2\n\n"
-        result += "🏆 Note finale: " + note + "\n\n"
-        result += "📋 Détail des notes\n\n"
-        result += "- Respect de la consigne: " + rc + "\n"
-        result += "- Organisation: " + org + "\n"
-        result += "- Grammaire: " + gram + "\n"
-        result += "- Vocabulaire: " + voc + "\n"
-        result += "- Style: " + style + "\n\n"
-        result += "✅ Points forts\n\n"
-        for p in points_forts:
-            result += "- " + str(p).strip() + "\n"
-        result += "\n❌ Erreurs à corriger\n\n"
-        for e in erreurs:
-            result += "- " + str(e).strip() + "\n"
-        result += "\n📚 Vocabulaire B2 recommandé\n\n"
-        for v in vocab_rec:
-            result += "- " + str(v).strip() + "\n"
-
-        return result.strip()
-
-    except Exception as e:
-        print("Grade JSON Error: " + str(e))
-        print("Raw grade: " + raw[:300])
-        return "Correction recue! Erreur de formatage, reessaie."
+    return clean_text(raw)
 
 
 def morning_push():
@@ -217,7 +216,7 @@ def callback():
 def generate():
     msg1, msg2 = generate_delf_practice()
     save_daily(msg1, msg2)
-    return "Done! msg1=" + msg1[:80] + "...", 200
+    return "Done! Theme: " + get_topic_of_day() + " | msg1=" + msg1[:60] + "...", 200
 
 
 @app.route("/push", methods=["GET"])
@@ -231,7 +230,7 @@ def push():
 
 @app.route("/", methods=["GET"])
 def index():
-    return "DELF Bot is running!", 200
+    return "DELF Bot is running! Theme today: " + get_topic_of_day(), 200
 
 
 @handler.add(MessageEvent, message=TextMessage)
@@ -251,14 +250,14 @@ def handle_message(event):
             safe_reply(event.reply_token, "Pas encore charge, reessaie plus tard!")
 
     elif user_states.get(user_id) == "awaiting_essay" and is_essay(user_text):
-        safe_reply(event.reply_token, "⏳ Correction en cours, patiente 10 secondes...")
+        safe_reply(event.reply_token, "Correction en cours, patiente 10 secondes...")
         topic = cache.get("message_1", "") if cache else ""
         result = grade_essay(user_text, topic)
         user_states[user_id] = None
         safe_push(user_id, result)
 
     else:
-        safe_reply(event.reply_token, "👋 Envoie 完成 ou ✅ pour recevoir la redaction modele du jour!")
+        safe_reply(event.reply_token, "Envoie 完成 ou pour recevoir la redaction modele du jour!")
 
 
 scheduler = BackgroundScheduler()
