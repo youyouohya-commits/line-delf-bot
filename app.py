@@ -136,6 +136,14 @@ def generate():
     save_daily(msg1, msg2)
     return "Done! msg1=" + msg1[:50] + "...", 200
 
+@app.route("/push", methods=["GET"])
+def push():
+    cache = load_daily()
+    if cache:
+        line_bot_api.broadcast(TextSendMessage(text=cache["message_1"]))
+        return "Pushed! Check your LINE!", 200
+    return "No content yet, run /generate first!", 400
+
 
 @app.route("/", methods=["GET"])
 def index():
