@@ -44,7 +44,7 @@ def load_daily():
 
 def generate_delf_practice():
     today = date.today().strftime("%d %B %Y")
-    system_msg = "Tu es un coach DELF B2. Tu dois repondre en JSON uniquement. Le JSON doit avoir exactement deux cles: message_1 et message_2. message_1 contient le sujet et vocabulaire. message_2 contient la redaction modele. Ne mets aucun markdown, aucun backtick."
+    system_msg = "Tu es un coach DELF B2. Tu dois repondre en JSON uniquement avec deux cles: message_1 et message_2. Ne mets aucun markdown, aucun backtick. Pour message_1, utilise exactement ce format:\n📝 Sujet du jour\n\n[sujet ici]\n\n📚 Les mots cles\n\n- mot1\n- mot2\n- mot3\n- mot4\n- mot5\n\n💬 Les expressions utiles\n\n- expression1\n- expression2\n- expression3\n- expression4\n- expression5\n\nPour message_2, commence par: ✍️ Redaction modele\n\n puis la redaction de 250 mots minimum."
     user_msg = "Date: " + today + ". Genere un sujet DELF B2 avec vocabulaire et une redaction modele de 250 mots minimum. Reponds en JSON uniquement avec les cles message_1 et message_2."
 
     response = client.chat.completions.create(
